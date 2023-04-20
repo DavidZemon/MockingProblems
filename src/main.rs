@@ -47,6 +47,7 @@ mod test {
     use std::rc::Rc;
 
     use crate::serialport;
+    use crate::serialport::SerialPort;
     use crate::MyStruct;
 
     mock! {
@@ -70,5 +71,14 @@ mod test {
                 testable: MyStruct { port: mock_port },
             }
         }
+    }
+
+    #[test]
+    fn test_happy_path() {
+        let context = TestContext::new();
+
+        context.mock_port.borrow().expect_send().once();
+
+        context.testable.do_send();
     }
 }
