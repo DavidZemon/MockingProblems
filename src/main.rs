@@ -1,39 +1,42 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-trait NotMyCodeTrait {
-    fn foo(&self);
+/// This is not my code. This is a simplified version of the serialport crate.
+mod serialport {
+    pub trait SerialPort {
+        fn send(&self);
+    }
+
+    pub struct SomeConcreteSerialPort {}
+
+    impl SerialPort for SomeConcreteSerialPort {
+        fn send(&self) {}
+    }
+
+    pub fn new() -> Box<dyn SerialPort> {
+        Box::new(SomeConcreteSerialPort {})
+    }
 }
 
-struct NotMyCodeStruct {}
-
-impl NotMyCodeTrait for NotMyCodeStruct {
-    fn foo(&self) {}
+struct MyStruct {
+    port: Rc<RefCell<Box<dyn serialport::SerialPort>>>,
 }
 
-fn not_my_builder_for_not_my_code() -> Box<dyn NotMyCodeTrait> {
-    Box::new(NotMyCodeStruct {})
-}
-
-struct ThisIsMyStruct {
-    dependency: Rc<RefCell<Box<dyn NotMyCodeTrait>>>,
-}
-
-impl ThisIsMyStruct {
+impl MyStruct {
     fn new() -> Self {
         Self {
-            dependency: Rc::new(RefCell::new(not_my_builder_for_not_my_code())),
+            port: Rc::new(RefCell::new(serialport::new())),
         }
     }
 
-    fn do_foo(&self) {
-        self.dependency.borrow().foo();
+    fn do_send(&self) {
+        self.port.borrow().send();
     }
 }
 
 fn main() {
-    let my_struct = ThisIsMyStruct::new();
-    my_struct.do_foo();
+    let my_struct = MyStruct::new();
+    my_struct.do_send();
     println!("The foo is done!");
 }
 
@@ -43,29 +46,28 @@ mod test {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use crate::{NotMyCodeTrait, ThisIsMyStruct};
+    use crate::serialport;
+    use crate::MyStruct;
 
     mock! {
-        MyNotMyCodeTrait {}
+        SerialPort {}
 
-        impl NotMyCodeTrait for MyNotMyCodeTrait {
-            fn foo(&self);
+        impl serialport::SerialPort for SerialPort {
+            fn send(&self);
         }
     }
 
     struct TestContext {
-        mock_port: Rc<RefCell<Box<MockMyNotMyCodeTrait>>>,
-        testable: ThisIsMyStruct,
+        mock_port: Rc<RefCell<Box<MockSerialPort>>>,
+        testable: MyStruct,
     }
 
     impl TestContext {
         fn new() -> Self {
-            let mocked_dependency = Rc::new(RefCell::new(Box::new(MockMyNotMyCodeTrait::new())));
+            let mock_port = Rc::new(RefCell::new(Box::new(MockSerialPort::new())));
             Self {
-                mock_port: Rc::clone(&mocked_dependency),
-                testable: ThisIsMyStruct {
-                    dependency: mocked_dependency,
-                },
+                mock_port: Rc::clone(&mock_port),
+                testable: MyStruct { port: mock_port },
             }
         }
     }
