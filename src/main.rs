@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 /// This is not my code. This is a simplified version of the serialport crate.
 mod serialport {
     pub trait SerialPort {
@@ -19,18 +16,18 @@ mod serialport {
 }
 
 struct MyStruct {
-    port: Rc<RefCell<Box<dyn serialport::SerialPort>>>,
+    port: Box<dyn serialport::SerialPort>,
 }
 
 impl MyStruct {
     fn new() -> Self {
         Self {
-            port: Rc::new(RefCell::new(serialport::new())),
+            port: serialport::new(),
         }
     }
 
     fn do_send(&self) {
-        self.port.borrow().send();
+        self.port.send();
     }
 }
 
@@ -43,11 +40,9 @@ fn main() {
 #[cfg(test)]
 mod test {
     use mockall::mock;
-    use std::cell::RefCell;
     use std::rc::Rc;
 
     use crate::serialport;
-    use crate::serialport::SerialPort;
     use crate::MyStruct;
 
     mock! {
@@ -58,17 +53,26 @@ mod test {
         }
     }
 
+    struct SharedMockSerialPort(Rc<MockSerialPort>);
+    impl serialport::SerialPort for SharedMockSerialPort {
+        fn send(&self) {
+            self.0.send();
+        }
+    }
+
     struct TestContext {
-        mock_port: Rc<RefCell<Box<MockSerialPort>>>,
+        mock_port: Rc<MockSerialPort>,
         testable: MyStruct,
     }
 
     impl TestContext {
         fn new() -> Self {
-            let mock_port = Rc::new(RefCell::new(Box::new(MockSerialPort::new())));
+            let mock_port = Rc::new(MockSerialPort::new());
             Self {
                 mock_port: Rc::clone(&mock_port),
-                testable: MyStruct { port: mock_port },
+                testable: MyStruct {
+                    port: Box::new(SharedMockSerialPort(mock_port)),
+                },
             }
         }
     }
@@ -77,7 +81,7 @@ mod test {
     fn test_happy_path() {
         let context = TestContext::new();
 
-        context.mock_port.borrow().expect_send().once();
+        context.mock_port.expect_send().once();
 
         context.testable.do_send();
     }
