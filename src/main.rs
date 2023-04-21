@@ -1,6 +1,8 @@
 /// This is not my code. This is a simplified version of the serialport crate.
 mod serialport {
-    pub trait SerialPort {
+    use std::io;
+
+    pub trait SerialPort: Send + io::Read {
         fn send(&self);
     }
 
@@ -8,6 +10,12 @@ mod serialport {
 
     impl SerialPort for SomeConcreteSerialPort {
         fn send(&self) {}
+    }
+
+    impl io::Read for SomeConcreteSerialPort {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            Ok(0)
+        }
     }
 
     pub fn new() -> Box<dyn SerialPort> {
@@ -40,7 +48,8 @@ fn main() {
 #[cfg(test)]
 mod test {
     use mockall::mock;
-    use std::rc::Rc;
+    use std::io;
+    use std::sync::{Arc, Mutex};
 
     use crate::serialport;
     use crate::MyStruct;
@@ -51,25 +60,34 @@ mod test {
         impl serialport::SerialPort for SerialPort {
             fn send(&self);
         }
+
+        impl io::Read for SerialPort {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
+        }
     }
 
-    struct SharedMockSerialPort(Rc<MockSerialPort>);
+    struct SharedMockSerialPort(Arc<Mutex<MockSerialPort>>);
     impl serialport::SerialPort for SharedMockSerialPort {
         fn send(&self) {
-            self.0.send();
+            self.0.lock().unwrap().send()
+        }
+    }
+    impl io::Read for SharedMockSerialPort {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().read(buf)
         }
     }
 
     struct TestContext {
-        mock_port: Rc<MockSerialPort>,
+        mock_port: Arc<Mutex<MockSerialPort>>,
         testable: MyStruct,
     }
 
     impl TestContext {
         fn new() -> Self {
-            let mock_port = Rc::new(MockSerialPort::new());
+            let mock_port = Arc::new(Mutex::new(MockSerialPort::new()));
             Self {
-                mock_port: Rc::clone(&mock_port),
+                mock_port: Arc::clone(&mock_port),
                 testable: MyStruct {
                     port: Box::new(SharedMockSerialPort(mock_port)),
                 },
@@ -81,7 +99,13 @@ mod test {
     fn test_happy_path() {
         let context = TestContext::new();
 
-        context.mock_port.expect_send().once();
+        context
+            .mock_port
+            .lock()
+            .unwrap()
+            .expect_send()
+            .once()
+            .return_const(());
 
         context.testable.do_send();
     }
