@@ -1,27 +1,4 @@
-/// This is not my code. This is a simplified version of the serialport crate.
-mod serialport {
-    use std::io;
-
-    pub trait SerialPort: Send + io::Read {
-        fn send(&self);
-    }
-
-    pub struct SomeConcreteSerialPort {}
-
-    impl SerialPort for SomeConcreteSerialPort {
-        fn send(&self) {}
-    }
-
-    impl io::Read for SomeConcreteSerialPort {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            Ok(0)
-        }
-    }
-
-    pub fn new() -> Box<dyn SerialPort> {
-        Box::new(SomeConcreteSerialPort {})
-    }
-}
+mod serialport;
 
 struct MyStruct {
     port: Box<dyn serialport::SerialPort>,
